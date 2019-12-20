@@ -29,8 +29,6 @@ bool CSerialPort::ConfigurePort(DWORD BaudRate, BYTE ByteSize, DWORD fParity,
 {  
 	if((m_bPortReady = GetCommState(m_hComm, &m_dcb))==0)  
 	{  
-		printf("\nGetCommState Error\n");
-		//"MessageBox(L, L"Error", MB_OK + MB_ICONERROR);  
 		CloseHandle(m_hComm);  
 		return false;  
 	}  
@@ -58,8 +56,6 @@ bool CSerialPort::ConfigurePort(DWORD BaudRate, BYTE ByteSize, DWORD fParity,
 
 	if(m_bPortReady == 0)  
 	{  
-		//MessageBox(L"SetCommState Error");  
-		printf("SetCommState Error");
 		CloseHandle(m_hComm);  
 		return false;  
 	}  
@@ -84,8 +80,6 @@ bool CSerialPort::SetCommunicationTimeouts(DWORD ReadIntervalTimeout,
 
 	if(m_bPortReady == 0)  
 	{  
-		//MessageBox(L"StCommTimeouts function failed",L"Com Port Error",MB_OK+MB_ICONERROR);  
-		printf("\nStCommTimeouts function failed\n");
 		CloseHandle(m_hComm);  
 		return false;  
 	}  
@@ -140,3 +134,15 @@ void CSerialPort::ClosePort()
 	CloseHandle(m_hComm);  
 	return;  
 }  
+
+int CSerialPort::ReadDataWaiting()
+{
+	if (!m_bPortReady || m_hComm == NULL) return(0);
+
+	DWORD dwErrorFlags;
+	COMSTAT ComStat;
+
+	ClearCommError(m_hComm, &dwErrorFlags, &ComStat);
+
+	return((int)ComStat.cbInQue);
+}

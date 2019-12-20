@@ -30,5 +30,6 @@ public:
 		DWORD ReadTotalTimeoutMultiplier, DWORD ReadTotalTimeoutConstant,  
 		DWORD WriteTotalTimeoutMultiplier,DWORD WriteTotalTimeoutConstant);  
 	bool ConfigurePort(DWORD BaudRate, BYTE ByteSize, DWORD fParity,   
-		BYTE  Parity,BYTE StopBits);  
+		BYTE  Parity,BYTE StopBits);
+	int CSerialPort::ReadDataWaiting();
 };
