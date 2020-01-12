@@ -1,0 +1,22 @@
+﻿D:\Program Files\Visualstudio\MSBuild\Microsoft\VC\v160\Microsoft.CppBuild.targets(445,5): warning MSB8004: Output Directory does not end with a trailing slash.  This build instance will add the slash as it is required to allow proper evaluation of the Output Directory.
+D:\Program Files\Visualstudio\MSBuild\Microsoft\VC\v160\Microsoft.CppBuild.targets(459,5): warning MSB8028: The intermediate directory (x64\Release\) contains files shared from another project (Orion_Driver.vcxproj).  This can lead to incorrect clean and rebuild behavior.
+  driverlog.cpp
+  Orion_Driver.cpp
+E:\Orion\Orion_Driver\Orion_Driver.cpp(107,66): warning C4244: '+=': 'double'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(108,66): warning C4244: '+=': 'double'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(109,47): warning C4244: '+=': 'double'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(442,63): warning C4838: 'double'에서 'float'(으)로의 변환에는 축소 변환이 필요합니다.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(442,63): warning C4244: '초기화 중': 'double'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(442,99): warning C4838: 'double'에서 'float'(으)로의 변환에는 축소 변환이 필요합니다.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(442,99): warning C4244: '초기화 중': 'double'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(442,135): warning C4838: 'double'에서 'float'(으)로의 변환에는 축소 변환이 필요합니다.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(442,135): warning C4244: '초기화 중': 'double'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+  serialcomm.cpp
+  serialport.cpp
+     ..\bin\drivers\orion\bin\win64\driver_orion.lib 라이브러리 및 ..\bin\drivers\orion\bin\win64\driver_orion.exp 개체를 생성하고 있습니다.
+  코드를 생성하고 있습니다.
+  Previous IPDB not found, fall back to full compilation.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(464): warning C4715: 'Tracker_Driver::GetPose': 모든 제어 경로에서 값을 반환하지는 않습니다.
+  All 397 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  코드를 생성했습니다.
+  Orion_Driver.vcxproj -> E:\Orion\Orion_Driver\..\bin\drivers\orion\bin\win64\driver_orion.dll
