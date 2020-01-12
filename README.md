@@ -1,4 +1,3 @@
-# the-real-time-motion-capture-tracker-device
+# Project_Orion
 
-이 리포지토리는 실시간 모션 캡쳐 트래커 장치에 관한 리포지토리입니다.
-업데이트는 될수도 안될수도 있습니다.
+Orion은 기존의 Vive tracker를 대체하는 새로운 패러다임의 트래커로, 3DOF 트래커 8개와 6DOF 추적이 가능한 HMD를 기반으로 풀 바디 트래킹을 구현할 수 있습니다.
