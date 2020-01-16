@@ -131,7 +131,7 @@ bool COpenVROverlayController::Init()
 
 	if( bSuccess )
 	{
-        vr::VROverlay()->SetOverlayWidthInMeters( m_ulOverlayHandle, 1.5f );
+        vr::VROverlay()->SetOverlayWidthInMeters( m_ulOverlayHandle, 3.0f );
         vr::VROverlay()->SetOverlayInputMethod( m_ulOverlayHandle, vr::VROverlayInputMethod_Mouse );
 	
 		m_pPumpEventsTimer = new QTimer( this );

@@ -11,8 +11,5 @@ int main(int argc, char *argv[])
 
     COpenVROverlayController::SharedInstance()->SetWidget( pOverlayWidget );
 
-    // don't show widgets that you're going display in an overlay
-    //w.show();
-
     return a.exec();
 }
