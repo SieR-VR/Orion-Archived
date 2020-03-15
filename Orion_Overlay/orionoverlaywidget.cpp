@@ -10,7 +10,22 @@ OverlayWidget::OverlayWidget(QWidget *parent) :
     timer = new QTimer();
     connect(timer, SIGNAL(timeout()), this, SLOT(execute_repeat()));
     timer->start(1);
-    ui->backmain->hide();
+
+    RedPalette.setBrush(QPalette::WindowText, QBrush(QColor(255,0,0)));
+    GreenPalette.setBrush(QPalette::WindowText,QBrush(QColor(0,255,0)));
+
+    ui->btnbackmain->hide();
+    ui->ConnectionWidget->hide();
+
+    ui->Chest_Connection->setPalette(RedPalette);
+    ui->Waist_Connection->setPalette(RedPalette);
+    ui->RT_Connection->setPalette(RedPalette);
+    ui->LT_Connection->setPalette(RedPalette);
+    ui->RC_Connection->setPalette(RedPalette);
+    ui->LC_Connection->setPalette(RedPalette);
+    ui->RF_Connection->setPalette(RedPalette);
+    ui->LF_Connection->setPalette(RedPalette);
+    ui->btnbackmain->hide();
 }
 
 OverlayWidget::~OverlayWidget()
@@ -18,34 +33,66 @@ OverlayWidget::~OverlayWidget()
     delete ui;
 }
 
-void OverlayWidget::on_Calibration_clicked()
-{
-
-}
-
 void OverlayWidget::execute_repeat()
 {
 
+    if(pStruct->connecting[CHEST])
+        ui->Chest_Connection->setPalette(GreenPalette);
+    else
+        ui->Chest_Connection->setPalette(RedPalette);
+    if(pStruct->connecting[WAIST])
+        ui->Waist_Connection->setPalette(GreenPalette);
+    else
+        ui->Waist_Connection->setPalette(RedPalette);
+    if(pStruct->connecting[RIGHT_THIGH])
+        ui->RT_Connection->setPalette(GreenPalette);
+    else
+        ui->RT_Connection->setPalette(RedPalette);
+    if(pStruct->connecting[LEFT_THIGH])
+        ui->LT_Connection->setPalette(GreenPalette);
+    else
+        ui->LT_Connection->setPalette(RedPalette);
+    if(pStruct->connecting[RIGHT_CALF])
+        ui->RC_Connection->setPalette(GreenPalette);
+    else
+        ui->RC_Connection->setPalette(RedPalette);
+    if(pStruct->connecting[LEFT_CALF])
+        ui->LC_Connection->setPalette(GreenPalette);
+    else
+        ui->LC_Connection->setPalette(RedPalette);
+    if(pStruct->connecting[RIGHT_FOOT])
+        ui->RF_Connection->setPalette(GreenPalette);
+    else
+        ui->RF_Connection->setPalette(RedPalette);
+    if(pStruct->connecting[LEFT_FOOT])
+        ui->LF_Connection->setPalette(GreenPalette);
+    else
+        ui->LF_Connection->setPalette(RedPalette);
+
 }
 
-void OverlayWidget::on_Connection_clicked()
-{
-    ui->Mirror->hide();
-    ui->Cali_info->hide();
-    ui->Connection->hide();
-    ui->Calibration->hide();
 
-    ui->backmain->show();
-    isconn = true;
+void OverlayWidget::on_btnConnection_clicked()
+{
+
+    ui->title->setText("Connection Management");
+
+    ui->btnbackmain->show();
+    ui->mainScreenWidget->hide();
+    ui->ConnectionWidget->show();
 }
 
-void OverlayWidget::on_backmain_clicked()
+void OverlayWidget::on_btnbackmain_clicked()
 {
-    ui->Mirror->show();
-    ui->Cali_info->show();
-    ui->Connection->show();
-    ui->Calibration->show();
 
-    ui->backmain->hide();
-    isconn = false;
+    ui->title->setText("Orion Settings");
+
+    ui->btnbackmain->hide();
+    ui->ConnectionWidget->hide();
+    ui->mainScreenWidget->show();
+}
+
+void OverlayWidget::on_btnQuit_clicked()
+{
+   QApplication::quit();
 }

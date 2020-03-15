@@ -11,7 +11,8 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 TARGET = Orion_Overlay
 TEMPLATE = app
 
-INCLUDEPATH += ../openvr/headers
+INCLUDEPATH += ../openvr/headers\
+               C:\Program Files (x86)\Windows Kits\10\Include\10.0.18362.0\um
 
 SOURCES += main.cpp \
     orionoverlaywidget.cpp \
