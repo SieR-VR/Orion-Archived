@@ -1,0 +1,11 @@
+{
+	"alwaysActivate": false,
+	"name" : "orion",
+	"directory" : "",
+	"resourceOnly" : false,
+
+	"hmd_presence" :
+	[
+		"*.*"
+	]
+}
