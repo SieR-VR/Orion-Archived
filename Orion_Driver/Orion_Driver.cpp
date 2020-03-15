@@ -14,6 +14,7 @@
 #include <cstring> // <string.h>
 #include <string> // c++ string
 #include <memory.h>
+#include <tchar.h>
 #include "serialcomm.h"
 
 #define T_BUFFERLEN 8
@@ -87,7 +88,7 @@ HmdQuaternion_t GetRotation(const HmdMatrix34_t& matrix) {
 	return q;
 }
 
-// HmdMatrix34_t에서 쿼터니언 위치 성분 추출
+// HmdMatrix34_t에서 위치 성분 추출
 HmdVector3_t GetPosition(const HmdMatrix34_t& matrix) {
 	HmdVector3_t vector;
 
@@ -139,6 +140,32 @@ HmdQuaternion_t ToQuat(const HmdVector3_t& angles) {
 
 	return q;
 }
+
+struct OverlayShereMem {
+	bool connecting[9];
+	bool connection[9];
+	double position[3][9];
+	bool calibration;
+};
+
+HANDLE hMapping = CreateFileMapping(
+	INVALID_HANDLE_VALUE,
+	NULL,
+	PAGE_READWRITE,
+	0,
+	sizeof(OverlayShereMem),
+	L"SH_MEM"
+);
+
+LPBYTE buf = (BYTE*)MapViewOfFile(
+	hMapping,
+	FILE_MAP_ALL_ACCESS,
+	0,
+	0,
+	0
+);
+
+OverlayShereMem* pShereMem = (OverlayShereMem*)buf;
 
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -214,22 +241,12 @@ void CWatchdogDriver_Sample::Cleanup()
 	CleanupDriverLog();
 }
 
-DriverPose_t Tracker_pose[9];
+DriverPose_t Tracker_pose[9] = { 0 };
 
-// Chest Driver
+// Tracker Driver
 class Tracker_Driver : public vr::ITrackedDeviceServerDriver
 {
 public:
-	Tracker_Driver(TrackerType tType=CHEST) { // default constructor
-		m_unObjectId = vr::k_unTrackedDeviceIndexInvalid;
-		m_ulPropertyContainer = k_ulInvalidPropertyContainer;
-		DriverLog("ObjectID and Property updated");
-
-		m_sSerialNumber = "Chest_Tracker";
-		m_sModelNumber = "Chest_Tracker";
-		Tracker_pose[tType] = { 0 };
-	}
-
 	Tracker_Driver(const char* comport, const std::string& Modelname, TrackerType tType)
 		: tType(tType)
 	{
@@ -266,59 +283,11 @@ public:
 		vr::VRProperties()->SetBoolProperty(m_ulPropertyContainer, Prop_WillDriftInYaw_Bool, false);
 
 		Tracker_pose[tType].poseIsValid = true;
-		Tracker_pose[tType].deviceIsConnected = true;
+		Tracker_pose[tType].deviceIsConnected = false;
 		Tracker_pose[tType].willDriftInYaw = true;
 		Tracker_pose[tType].shouldApplyHeadModel = true;
 		Tracker_pose[tType].qWorldFromDriverRotation = HmdQuaternion_Init(1, 0, 0, 0);
 		Tracker_pose[tType].qDriverFromHeadRotation = HmdQuaternion_Init(1, 0, 0, 0);
-
-		for (int i = 1; i < 11; i++) {
-			DriverLog("Connecting.. %d / 10...",i);
-			if (serialComm.connect(comport)) {
-				break;
-			}
-		}
-
-		DriverLog("connect successed");
-		connect = true;
-		BYTE ibuffer[T_BUFFERLEN] = { 0 };
-
-		while(1) {
-			serialComm.sendCommand(sendbuffer);
-			Sleep(100);
-			if (serialComm.serial.ReadDataWaiting() == 8) {
-				for (int i = 0; i < T_BUFFERLEN; i++) {
-					serialComm.serial.ReadByte(ibuffer[i]);
-				}
-				break;
-			}
-			else {
-				int rdw = serialComm.serial.ReadDataWaiting(); // 현재 버퍼에 남아있는 데이터 갯수
-				for (int i = 0; i < rdw; i++) { // 버퍼 비우기
-					serialComm.serial.ReadByte(ibuffer[i]);
-				}
-			}
-		}
-
-		// 8비트 데이터를 16비트 데이터로 변환
-		int16_t qw = ibuffer[0] << 8 | ibuffer[1];
-		int16_t qx = ibuffer[2] << 8 | ibuffer[3];
-		int16_t qy = ibuffer[4] << 8 | ibuffer[5];
-		int16_t qz = ibuffer[6] << 8 | ibuffer[7];	
-		// 단위 쿼터니언 값으로 변환, 동시에 캘리브레이션 값 이니셜라이징
-		caliquat.w = qw / 16384.0;
-		caliquat.x = qy / 16384.0;
-		caliquat.y = -qz / 16384.0;
-		caliquat.z = qx / 16384.0;
-		// 캘리브레이션 값의 반대로 이전 쿼터니언 값 넘겨주기
-		recenttrackerquat = HmdQuaternion_Init(caliquat.w,-caliquat.x,-caliquat.y,-caliquat.z);
-
-		int readdatawait = serialComm.serial.ReadDataWaiting();
-		for (int i = 0; i < readdatawait; i++) {
-			serialComm.serial.ReadByte(ibuffer[i]);
-		}
-		serialComm.sendCommand(sendbuffer);
-		DriverLog("raw calibration data : %d, %d, %d, %d", qw, qx, qy, qz);
 		
 		return VRInitError_None;
 	}
@@ -354,117 +323,170 @@ public:
 
 	// RunFrame에서 호출되어 DriverPose_t 반환
 	virtual DriverPose_t GetPose()
-	{	
-		BYTE ibuffer[T_BUFFERLEN * 2];
-		int16_t qw, qx, qy, qz;
-		int readdatawait = serialComm.serial.ReadDataWaiting();
-		if (readdatawait == T_BUFFERLEN) {
-			for (int i = 0; i < T_BUFFERLEN; i++) {
-				serialComm.serial.ReadByte(ibuffer[i]);
-			}
-			serialComm.sendCommand('r');
-			qw = ibuffer[0] << 8 | ibuffer[1];
-			qx = ibuffer[2] << 8 | ibuffer[3];
-			qy = ibuffer[4] << 8 | ibuffer[5];
-			qz = ibuffer[6] << 8 | ibuffer[7];
-			memset(ibuffer, 0, sizeof(ibuffer));
+	{
+		if(Tracker_pose[tType].deviceIsConnected)
+		{
+			int readdatawait = serialComm.serial.ReadDataWaiting();
+			if (readdatawait == T_BUFFERLEN) {
+				for (int i = 0; i < T_BUFFERLEN; i++) {
+					serialComm.serial.ReadByte(ibuffer[i]);
+				}
+				serialComm.sendCommand('r');
+				qw = ibuffer[0] << 8 | ibuffer[1];
+				qx = ibuffer[2] << 8 | ibuffer[3];
+				qy = ibuffer[4] << 8 | ibuffer[5];
+				qz = ibuffer[6] << 8 | ibuffer[7];
+				memset(ibuffer, 0, sizeof(ibuffer));
 
-			// 센서 좌표계와 SteamVR 좌표계 변환
-			HmdQuaternion_t raw_chest_quat = HmdQuaternion_Init(
-				qw / 16384.0,
-				-qy / 16384.0,
-				qz / 16384.0,
-				-qx / 16384.0
-			);
+				// 센서 좌표계와 SteamVR 좌표계 변환
+				HmdQuaternion_t raw_chest_quat = HmdQuaternion_Init(
+					qw / 16384.0,
+					-qy / 16384.0,
+					qz / 16384.0,
+					-qx / 16384.0
+				);
 
-			// 캘리브레이션
-			Tracker_pose[tType].qRotation = mulq(
-				raw_chest_quat,
-				HmdQuaternion_Init(caliquat.w,caliquat.x, caliquat.y, caliquat.z)
-			);
-			CompareReadDataWaiting(8);
-			DriverLog(
-				"quat : %f, %f, %f, %f",
-				Tracker_pose[tType].qRotation.w,
-				Tracker_pose[tType].qRotation.x, 
-				Tracker_pose[tType].qRotation.y, 
-				Tracker_pose[tType].qRotation.z
-			);
-		}
-		else if (CompareReadDataWaiting(readdatawait) || readdatawait > T_BUFFERLEN) {
-			for (int i = 0; i < readdatawait; i++) {
-				serialComm.serial.ReadByte(ibuffer[i]);
+				// 캘리브레이션
+				Tracker_pose[tType].qRotation = mulq(
+					raw_chest_quat,
+					HmdQuaternion_Init(caliquat.w, caliquat.x, caliquat.y, caliquat.z)
+				);
+				CompareReadDataWaiting(8);
+				DriverLog(
+					"quat : %f, %f, %f, %f",
+					Tracker_pose[tType].qRotation.w,
+					Tracker_pose[tType].qRotation.x,
+					Tracker_pose[tType].qRotation.y,
+					Tracker_pose[tType].qRotation.z
+				);
 			}
-			memset(ibuffer, 0, sizeof(ibuffer));
-			serialComm.sendCommand(sendbuffer);
-			DriverLog("Buffer Reset..");
-			CompareReadDataWaiting(1);
-			Tracker_pose[tType].qRotation = recenttrackerquat;
-		}
-	
-		if (tType == CHEST) {
-			vr::VRServerDriverHost()->GetRawTrackedDevicePoses(0, &HMDpose, 1);
-			HmdQuaternion_t HMDq = GetRotation(HMDpose.mDeviceToAbsoluteTracking);
-			HmdVector3_t HMDp = GetPosition(HMDpose.mDeviceToAbsoluteTracking);
-			HMDp = MovePosition(
-				mulq(
-					HMDq,
-					HmdQuaternion_Init(0, 0, 1, 0)
-				),
-				HMDp,
-				0.15
-			);
-			HmdVector3_t Trackerp = MovePosition(
-				mulq(
-					Tracker_pose[tType].qRotation,
-					HmdQuaternion_Init(0.7071068, -0.7071068, 0, 0)
-				),
-				MovePosition(
+			else if (CompareReadDataWaiting(readdatawait) || readdatawait > T_BUFFERLEN) {
+				for (int i = 0; i < readdatawait; i++) {
+					serialComm.serial.ReadByte(ibuffer[i]);
+				}
+				memset(ibuffer, 0, sizeof(ibuffer));
+				serialComm.sendCommand(sendbuffer);
+				DriverLog("Buffer Reset..");
+				CompareReadDataWaiting(1);
+				Tracker_pose[tType].qRotation = recenttrackerquat;
+			}
+
+			if (tType == CHEST) {
+				vr::VRServerDriverHost()->GetRawTrackedDevicePoses(0, &HMDpose, 1);
+				HmdQuaternion_t HMDq = GetRotation(HMDpose.mDeviceToAbsoluteTracking);
+				HmdVector3_t HMDp = GetPosition(HMDpose.mDeviceToAbsoluteTracking);
+				HMDp = MovePosition(
 					mulq(
 						HMDq,
-						HmdQuaternion_Init(0.7071068, -0.7071068, 0, 0)
+						HmdQuaternion_Init(0, 0, 1, 0)
 					),
 					HMDp,
+					0.15
+				);
+				HmdVector3_t Trackerp = MovePosition(
+					mulq(
+						Tracker_pose[tType].qRotation,
+						HmdQuaternion_Init(0.7071068, -0.7071068, 0, 0)
+					),
+					MovePosition(
+						mulq(
+							HMDq,
+							HmdQuaternion_Init(0.7071068, -0.7071068, 0, 0)
+						),
+						HMDp,
+						0.2
+					),
 					0.2
-				),
-				0.2
-			);
-			Tracker_pose[tType].vecPosition[0] = Trackerp.v[0];
-			Tracker_pose[tType].vecPosition[1] = Trackerp.v[1];
-			Tracker_pose[tType].vecPosition[2] = Trackerp.v[2];
+				);
+				Tracker_pose[tType].vecPosition[0] = Trackerp.v[0];
+				Tracker_pose[tType].vecPosition[1] = Trackerp.v[1];
+				Tracker_pose[tType].vecPosition[2] = Trackerp.v[2];
 
-			recenttrackerquat = Tracker_pose[tType].qRotation;
+				recenttrackerquat = Tracker_pose[tType].qRotation;
 
-			Tracker_pose[tType].result = TrackingResult_Running_OK;
+				Tracker_pose[tType].result = TrackingResult_Running_OK;
+				return Tracker_pose[tType];
+			}
+			else if (tType == WAIST) {
+				HmdVector3_t Chestpose;
+				for (int i = 0; i < 3; i++)
+					Chestpose.v[i] = Tracker_pose[CHEST].vecPosition[i];
+				HmdVector3_t TrackerLoc = MovePosition(
+					mulq(
+						Tracker_pose[tType].qRotation,
+						HmdQuaternion_Init(0.7071068, -0.7071068, 0, 0)
+					),
+					MovePosition(
+						Tracker_pose[tType].qRotation,
+						Chestpose,
+						0.1
+					),
+					0.1
+				);
+				Tracker_pose[tType].vecPosition[0] = TrackerLoc.v[0];
+				Tracker_pose[tType].vecPosition[1] = TrackerLoc.v[1];
+				Tracker_pose[tType].vecPosition[2] = TrackerLoc.v[2];
+
+				recenttrackerquat = Tracker_pose[tType].qRotation;
+
+				Tracker_pose[tType].result = TrackingResult_Running_OK;
+				return Tracker_pose[tType];
+			}
+			else if (tType == LEFT_THIGH) {
+				HmdVector3_t Waistpose;
+				for (int i = 0; i < 3; i++)
+					Waistpose.v[i] = Tracker_pose[WAIST].vecPosition[i];
+
+			}
+		}
+		else if (pShereMem->connection[tType]) {
+			DriverLog("Try Connect..");
+			if (serialComm.connect(comport)) {
+				while (1) {
+					serialComm.sendCommand(sendbuffer);
+					Sleep(100);
+					int rdw = serialComm.serial.ReadDataWaiting();
+					if (rdw == T_BUFFERLEN) {
+						for (int i = 0; i < T_BUFFERLEN; i++) {
+							serialComm.serial.ReadByte(ibuffer[i]);
+						}
+						serialComm.sendCommand('r');
+						qw = ibuffer[0] << 8 | ibuffer[1];
+						qx = ibuffer[2] << 8 | ibuffer[3];
+						qy = ibuffer[4] << 8 | ibuffer[5];
+						qz = ibuffer[6] << 8 | ibuffer[7];
+						memset(ibuffer, 0, sizeof(ibuffer));
+						break;
+					}
+					else {
+						for (int i = 0; i < rdw; i++) {
+							serialComm.serial.ReadByte(ibuffer[i]);
+						}
+						memset(ibuffer, 0, sizeof(ibuffer));
+					}
+				}
+				// 단위 쿼터니언 값으로 변환, 동시에 캘리브레이션 값 이니셜라이징
+				caliquat.w = qw / 16384.0;
+				caliquat.x = qy / 16384.0;
+				caliquat.y = -qz / 16384.0;
+				caliquat.z = qx / 16384.0;
+				// 캘리브레이션 값의 반대로 이전 쿼터니언 값 넘겨주기
+				recenttrackerquat = HmdQuaternion_Init(caliquat.w, -caliquat.x, -caliquat.y, -caliquat.z);
+				serialComm.sendCommand(sendbuffer);
+				DriverLog("raw calibration data : %d, %d, %d, %d", qw, qx, qy, qz);
+				Tracker_pose[tType].deviceIsConnected = true;
+				pShereMem->connection[tType] = false;
+				return Tracker_pose[tType];
+			}
 			return Tracker_pose[tType];
 		}
-		else if (tType == WAIST) {
-			HmdVector3_t Chestpose = {Tracker_pose[CHEST].vecPosition[0], Tracker_pose[CHEST].vecPosition[1], Tracker_pose[CHEST].vecPosition[2]};
-			HmdVector3_t TrackerLoc = MovePosition(
-				mulq(
-					Tracker_pose[tType].qRotation,
-					HmdQuaternion_Init(0.7071068, -0.7071068, 0, 0)
-				),
-				MovePosition(
-					Tracker_pose[tType].qRotation,
-					Chestpose,
-					0.1
-				),
-				0.1
-			);
-			Tracker_pose[tType].vecPosition[0] = TrackerLoc.v[0];
-			Tracker_pose[tType].vecPosition[1] = TrackerLoc.v[1];
-			Tracker_pose[tType].vecPosition[2] = TrackerLoc.v[2];
-
-			recenttrackerquat = Tracker_pose[tType].qRotation;
-
-			Tracker_pose[tType].result = TrackingResult_Running_OK;
+		else {
 			return Tracker_pose[tType];
 		}
 	}
 
 	void RunFrame() {
-		if ((m_unObjectId != vr::k_unTrackedDeviceIndexInvalid ) && connect)
+		if (m_unObjectId != vr::k_unTrackedDeviceIndexInvalid)
 		{
 			vr::VRServerDriverHost()->TrackedDevicePoseUpdated(m_unObjectId, GetPose(), sizeof(DriverPose_t));
 		}
@@ -499,9 +521,9 @@ private:
 	std::string m_sModelNumber;
 
 	bool count = 0; 
-	bool connect;
-
-	unsigned char ibuffer, sendbuffer = 0;
+	int16_t qw, qx, qy, qz;
+	BYTE ibuffer[T_BUFFERLEN * 2];
+	unsigned char sendbuffer = 0;
 
 	HmdQuaternion_t recenttrackerquat = HmdQuaternion_Init(1, 0, 0, 0);
 	HmdQuaternion_t caliquat = HmdQuaternion_Init(1, 0, 0, 0);
@@ -522,8 +544,14 @@ public:
 	virtual void EnterStandby()  {}
 	virtual void LeaveStandby()  {}
 
-	Tracker_Driver *m_pchest_tracker = nullptr;
-	Tracker_Driver *m_pwaist_tracker = nullptr;
+	Tracker_Driver* m_pchest_tracker = nullptr;
+	Tracker_Driver* m_pwaist_tracker = nullptr;
+	Tracker_Driver* m_pright_thigh_tracker = nullptr;
+	Tracker_Driver* m_pleft_thigh_tracker = nullptr;
+	Tracker_Driver* m_pright_calf_tracker = nullptr;
+	Tracker_Driver* m_pleft_calf_tracker = nullptr;
+	Tracker_Driver* m_pright_foot_tracker = nullptr;
+	Tracker_Driver* m_pleft_foot_tracker = nullptr;
 };
 
 CServerDriver_Sample g_serverDriverNull;
@@ -538,9 +566,33 @@ EVRInitError CServerDriver_Sample::Init( vr::IVRDriverContext *pDriverContext )
 	vr::VRServerDriverHost()->TrackedDeviceAdded(
 		m_pchest_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pchest_tracker
 	);
-	m_pwaist_tracker = new Tracker_Driver("COM6", "Waist_Tracker", WAIST	);
+	m_pwaist_tracker = new Tracker_Driver("COM6", "Waist_Tracker", WAIST);
 	vr::VRServerDriverHost()->TrackedDeviceAdded(
 		m_pwaist_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pwaist_tracker
+	);
+	m_pright_thigh_tracker = new Tracker_Driver("COM8", "Right_Thigh_Tracker", RIGHT_THIGH);
+	vr::VRServerDriverHost()->TrackedDeviceAdded(
+		m_pright_thigh_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pright_thigh_tracker
+	);
+	m_pleft_thigh_tracker = new Tracker_Driver("COM9", "Left_Thigh_Tracker", LEFT_THIGH);
+	vr::VRServerDriverHost()->TrackedDeviceAdded(
+		m_pleft_thigh_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pleft_thigh_tracker
+	);
+	m_pright_calf_tracker = new Tracker_Driver("COM10", "Right_Calf_Tracker", RIGHT_CALF);
+	vr::VRServerDriverHost()->TrackedDeviceAdded(
+		m_pright_calf_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pright_calf_tracker
+	);
+	m_pleft_calf_tracker = new Tracker_Driver("COM11", "Left_Calf_Tracker", LEFT_CALF);
+	vr::VRServerDriverHost()->TrackedDeviceAdded(
+		m_pleft_calf_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pleft_calf_tracker
+	);
+	m_pright_foot_tracker = new Tracker_Driver("COM12", "Right_Foot_Tracker", RIGHT_FOOT);
+	vr::VRServerDriverHost()->TrackedDeviceAdded(
+		m_pright_foot_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pright_foot_tracker
+	);
+	m_pleft_foot_tracker = new Tracker_Driver("COM13", "Left_Foot_Tracker", LEFT_FOOT);
+	vr::VRServerDriverHost()->TrackedDeviceAdded(
+		m_pleft_foot_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pleft_foot_tracker
 	);
 
 	return VRInitError_None;
@@ -556,7 +608,6 @@ void CServerDriver_Sample::Cleanup()
 	m_pchest_tracker = NULL;
 }
 
-
 void CServerDriver_Sample::RunFrame()
 {
 	if (m_pchest_tracker)
@@ -567,6 +618,13 @@ void CServerDriver_Sample::RunFrame()
 	{
 		m_pwaist_tracker->RunFrame();
 	}
+	
+	pShereMem->connecting[CHEST] = Tracker_pose[CHEST].deviceIsConnected;
+	pShereMem->connecting[WAIST] = Tracker_pose[WAIST].deviceIsConnected;
+
+	memcpy(pShereMem->position[CHEST], Tracker_pose[CHEST].vecPosition, sizeof(double) * 3);
+	memcpy(pShereMem->position[WAIST], Tracker_pose[WAIST].vecPosition, sizeof(double) * 3);
+
 }
 
 //-----------------------------------------------------------------------------
