@@ -6,6 +6,7 @@
 
 #include <openvr_driver.h>
 #include "driverlog.h"
+#include <Orion.h>
 
 #include <vector>
 #include <thread>
@@ -26,7 +27,6 @@
 #endif
 
 using namespace vr;
-
 
 #if defined(_WIN32)
 #define HMD_DLL_EXPORT extern "C" __declspec( dllexport )
@@ -140,13 +140,6 @@ HmdQuaternion_t ToQuat(const HmdVector3_t& angles) {
 
 	return q;
 }
-
-struct OverlayShereMem {
-	bool connecting[9];
-	bool connection[9];
-	double position[3][9];
-	bool calibration;
-};
 
 HANDLE hMapping = CreateFileMapping(
 	INVALID_HANDLE_VALUE,
@@ -339,26 +332,13 @@ public:
 				memset(ibuffer, 0, sizeof(ibuffer));
 
 				// 센서 좌표계와 SteamVR 좌표계 변환
-				HmdQuaternion_t raw_chest_quat = HmdQuaternion_Init(
+				raw_quat = HmdQuaternion_Init(
 					qw / 16384.0,
-					-qy / 16384.0,
+					qy / 16384.0,
 					qz / 16384.0,
-					-qx / 16384.0
-				);
-
-				// 캘리브레이션
-				Tracker_pose[tType].qRotation = mulq(
-					raw_chest_quat,
-					HmdQuaternion_Init(caliquat.w, caliquat.x, caliquat.y, caliquat.z)
+					qx / 16384.0
 				);
 				CompareReadDataWaiting(8);
-				DriverLog(
-					"quat : %f, %f, %f, %f",
-					Tracker_pose[tType].qRotation.w,
-					Tracker_pose[tType].qRotation.x,
-					Tracker_pose[tType].qRotation.y,
-					Tracker_pose[tType].qRotation.z
-				);
 			}
 			else if (CompareReadDataWaiting(readdatawait) || readdatawait > T_BUFFERLEN) {
 				for (int i = 0; i < readdatawait; i++) {
@@ -368,9 +348,18 @@ public:
 				serialComm.sendCommand(sendbuffer);
 				DriverLog("Buffer Reset..");
 				CompareReadDataWaiting(1);
-				Tracker_pose[tType].qRotation = recenttrackerquat;
 			}
-
+			if (!Tracker_pose[tType].deviceIsConnected)
+				return Tracker_pose[tType];
+			if (pShereMem->calibration) {
+				caliquat = HmdQuaternion_Init(raw_quat.w, -raw_quat.x, -raw_quat.y, -raw_quat.z);
+			}
+			// 캘리브레이션
+			Tracker_pose[tType].qRotation = mulq(
+				raw_quat,
+				caliquat
+			);
+			//disconnecting(false);
 			if (tType == CHEST) {
 				vr::VRServerDriverHost()->GetRawTrackedDevicePoses(0, &HMDpose, 1);
 				HmdQuaternion_t HMDq = GetRotation(HMDpose.mDeviceToAbsoluteTracking);
@@ -394,14 +383,14 @@ public:
 							HmdQuaternion_Init(0.7071068, -0.7071068, 0, 0)
 						),
 						HMDp,
-						0.2
+						0.21875
 					),
-					0.2
+					0.1640625
 				);
 				Tracker_pose[tType].vecPosition[0] = Trackerp.v[0];
 				Tracker_pose[tType].vecPosition[1] = Trackerp.v[1];
 				Tracker_pose[tType].vecPosition[2] = Trackerp.v[2];
-
+				
 				recenttrackerquat = Tracker_pose[tType].qRotation;
 
 				Tracker_pose[tType].result = TrackingResult_Running_OK;
@@ -417,11 +406,42 @@ public:
 						HmdQuaternion_Init(0.7071068, -0.7071068, 0, 0)
 					),
 					MovePosition(
-						Tracker_pose[tType].qRotation,
+						mulq(
+							Tracker_pose[CHEST].qRotation,
+							HmdQuaternion_Init(0.7071068, -0.7071068, 0, 0)
+						),
 						Chestpose,
+						0.12
+					),
+					0.12
+				);
+				Tracker_pose[tType].vecPosition[0] = TrackerLoc.v[0];
+				Tracker_pose[tType].vecPosition[1] = TrackerLoc.v[1];
+				Tracker_pose[tType].vecPosition[2] = TrackerLoc.v[2];
+
+				recenttrackerquat = Tracker_pose[tType].qRotation;
+
+				Tracker_pose[tType].result = TrackingResult_Running_OK;
+				return Tracker_pose[tType];
+			}
+			else if (tType == RIGHT_THIGH) {
+				HmdVector3_t Waistpose;
+				for (int i = 0; i < 3; i++)
+					Waistpose.v[i] = Tracker_pose[WAIST].vecPosition[i];
+				HmdVector3_t TrackerLoc = MovePosition(
+					mulq(
+						Tracker_pose[tType].qRotation,
+						HmdQuaternion_Init(0.7071068, -0.7071068, 0, 0)
+					),
+					MovePosition(
+						mulq(
+							Tracker_pose[WAIST].qRotation,
+							HmdQuaternion_Init(0.7071068, 0, 0.7071068, 0)
+						),
+						Waistpose,
 						0.1
 					),
-					0.1
+					0.215
 				);
 				Tracker_pose[tType].vecPosition[0] = TrackerLoc.v[0];
 				Tracker_pose[tType].vecPosition[1] = TrackerLoc.v[1];
@@ -436,11 +456,33 @@ public:
 				HmdVector3_t Waistpose;
 				for (int i = 0; i < 3; i++)
 					Waistpose.v[i] = Tracker_pose[WAIST].vecPosition[i];
+				HmdVector3_t TrackerLoc = MovePosition(
+					mulq(
+						Tracker_pose[tType].qRotation,
+						HmdQuaternion_Init(0.7071068, -0.7071068, 0, 0)
+					),
+					MovePosition(
+						mulq(
+							Tracker_pose[WAIST].qRotation,
+							HmdQuaternion_Init(0.7071068, 0, -0.7071068, 0)
+						),
+						Waistpose,
+						0.1
+					),
+					0.215
+				);
+				Tracker_pose[tType].vecPosition[0] = TrackerLoc.v[0];
+				Tracker_pose[tType].vecPosition[1] = TrackerLoc.v[1];
+				Tracker_pose[tType].vecPosition[2] = TrackerLoc.v[2];
 
+				recenttrackerquat = Tracker_pose[tType].qRotation;
+
+				Tracker_pose[tType].result = TrackingResult_Running_OK;
+				return Tracker_pose[tType];
 			}
 		}
 		else if (pShereMem->connection[tType]) {
-			DriverLog("Try Connect..");
+			DriverLog("%d : Try Connect..", tType);
 			if (serialComm.connect(comport)) {
 				while (1) {
 					serialComm.sendCommand(sendbuffer);
@@ -467,9 +509,9 @@ public:
 				}
 				// 단위 쿼터니언 값으로 변환, 동시에 캘리브레이션 값 이니셜라이징
 				caliquat.w = qw / 16384.0;
-				caliquat.x = qy / 16384.0;
+				caliquat.x = -qy / 16384.0;
 				caliquat.y = -qz / 16384.0;
-				caliquat.z = qx / 16384.0;
+				caliquat.z = -qx / 16384.0;
 				// 캘리브레이션 값의 반대로 이전 쿼터니언 값 넘겨주기
 				recenttrackerquat = HmdQuaternion_Init(caliquat.w, -caliquat.x, -caliquat.y, -caliquat.z);
 				serialComm.sendCommand(sendbuffer);
@@ -495,6 +537,7 @@ public:
 	void ProcessEvent(const vr::VREvent_t & vrEvent) {
 
 	}
+
 	std::string GetSerialNumber() const { return m_sSerialNumber; }
 
 	bool CompareReadDataWaiting(const int data) {
@@ -508,9 +551,24 @@ public:
 				return false;
 			}
 		}
+		//disconnecting(true);
 		return true;
 	}
-
+	void disconnecting(bool truth) {
+		static int disconn = 0;
+		if (truth) {
+			disconn++;
+		}
+		else {
+			disconn = 0;
+		}
+		if (disconn == 10) {
+			serialComm.disconnect();
+			Tracker_pose[tType].deviceIsConnected = false;
+			disconn = 0;
+		}	
+		return;
+	}
 private:
 	vr::TrackedDeviceIndex_t m_unObjectId;
 	vr::PropertyContainerHandle_t m_ulPropertyContainer;
@@ -527,6 +585,7 @@ private:
 
 	HmdQuaternion_t recenttrackerquat = HmdQuaternion_Init(1, 0, 0, 0);
 	HmdQuaternion_t caliquat = HmdQuaternion_Init(1, 0, 0, 0);
+	HmdQuaternion_t raw_quat = HmdQuaternion_Init(1, 0, 0, 0);
 	TrackedDevicePose_t HMDpose;
 	TrackerType tType;
 };
@@ -566,31 +625,31 @@ EVRInitError CServerDriver_Sample::Init( vr::IVRDriverContext *pDriverContext )
 	vr::VRServerDriverHost()->TrackedDeviceAdded(
 		m_pchest_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pchest_tracker
 	);
-	m_pwaist_tracker = new Tracker_Driver("COM6", "Waist_Tracker", WAIST);
+	m_pwaist_tracker = new Tracker_Driver("COM9", "Waist_Tracker", WAIST);
 	vr::VRServerDriverHost()->TrackedDeviceAdded(
 		m_pwaist_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pwaist_tracker
 	);
-	m_pright_thigh_tracker = new Tracker_Driver("COM8", "Right_Thigh_Tracker", RIGHT_THIGH);
+	m_pright_thigh_tracker = new Tracker_Driver("COM12", "Right_Thigh_Tracker", RIGHT_THIGH);
 	vr::VRServerDriverHost()->TrackedDeviceAdded(
 		m_pright_thigh_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pright_thigh_tracker
 	);
-	m_pleft_thigh_tracker = new Tracker_Driver("COM9", "Left_Thigh_Tracker", LEFT_THIGH);
+	m_pleft_thigh_tracker = new Tracker_Driver("COM10", "Left_Thigh_Tracker", LEFT_THIGH);
 	vr::VRServerDriverHost()->TrackedDeviceAdded(
 		m_pleft_thigh_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pleft_thigh_tracker
 	);
-	m_pright_calf_tracker = new Tracker_Driver("COM10", "Right_Calf_Tracker", RIGHT_CALF);
+	m_pright_calf_tracker = new Tracker_Driver("COM20", "Right_Calf_Tracker", RIGHT_CALF);
 	vr::VRServerDriverHost()->TrackedDeviceAdded(
 		m_pright_calf_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pright_calf_tracker
 	);
-	m_pleft_calf_tracker = new Tracker_Driver("COM11", "Left_Calf_Tracker", LEFT_CALF);
+	m_pleft_calf_tracker = new Tracker_Driver("COM21", "Left_Calf_Tracker", LEFT_CALF);
 	vr::VRServerDriverHost()->TrackedDeviceAdded(
 		m_pleft_calf_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pleft_calf_tracker
 	);
-	m_pright_foot_tracker = new Tracker_Driver("COM12", "Right_Foot_Tracker", RIGHT_FOOT);
+	m_pright_foot_tracker = new Tracker_Driver("COM22", "Right_Foot_Tracker", RIGHT_FOOT);
 	vr::VRServerDriverHost()->TrackedDeviceAdded(
 		m_pright_foot_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pright_foot_tracker
 	);
-	m_pleft_foot_tracker = new Tracker_Driver("COM13", "Left_Foot_Tracker", LEFT_FOOT);
+	m_pleft_foot_tracker = new Tracker_Driver("COM23", "Left_Foot_Tracker", LEFT_FOOT);
 	vr::VRServerDriverHost()->TrackedDeviceAdded(
 		m_pleft_foot_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pleft_foot_tracker
 	);
@@ -611,19 +670,40 @@ void CServerDriver_Sample::Cleanup()
 void CServerDriver_Sample::RunFrame()
 {
 	if (m_pchest_tracker)
-	{
 		m_pchest_tracker->RunFrame();
-	}
 	if (m_pwaist_tracker)
-	{
 		m_pwaist_tracker->RunFrame();
-	}
+	if (m_pright_thigh_tracker)
+		m_pright_thigh_tracker->RunFrame();
+	if (m_pleft_thigh_tracker)
+		m_pleft_thigh_tracker->RunFrame();
+	if (m_pright_calf_tracker)
+		m_pright_calf_tracker->RunFrame();
+	if (m_pleft_calf_tracker)
+		m_pleft_calf_tracker->RunFrame();
+	if (m_pright_foot_tracker)
+		m_pright_foot_tracker->RunFrame();
+	if (m_pleft_foot_tracker)
+		m_pleft_foot_tracker->RunFrame();
 	
 	pShereMem->connecting[CHEST] = Tracker_pose[CHEST].deviceIsConnected;
 	pShereMem->connecting[WAIST] = Tracker_pose[WAIST].deviceIsConnected;
+	pShereMem->connecting[RIGHT_THIGH] = Tracker_pose[RIGHT_THIGH].deviceIsConnected;
+	pShereMem->connecting[LEFT_THIGH] = Tracker_pose[LEFT_THIGH].deviceIsConnected;
+	pShereMem->connecting[RIGHT_CALF] = Tracker_pose[RIGHT_CALF].deviceIsConnected;
+	pShereMem->connecting[LEFT_CALF] = Tracker_pose[LEFT_CALF].deviceIsConnected;
+	pShereMem->connecting[RIGHT_FOOT] = Tracker_pose[RIGHT_FOOT].deviceIsConnected;
+	pShereMem->connecting[LEFT_FOOT] = Tracker_pose[LEFT_FOOT].deviceIsConnected;
+
 
 	memcpy(pShereMem->position[CHEST], Tracker_pose[CHEST].vecPosition, sizeof(double) * 3);
 	memcpy(pShereMem->position[WAIST], Tracker_pose[WAIST].vecPosition, sizeof(double) * 3);
+	memcpy(pShereMem->position[RIGHT_THIGH], Tracker_pose[RIGHT_THIGH].vecPosition, sizeof(double) * 3);
+	memcpy(pShereMem->position[LEFT_THIGH], Tracker_pose[LEFT_THIGH].vecPosition, sizeof(double) * 3);
+	memcpy(pShereMem->position[RIGHT_CALF], Tracker_pose[RIGHT_CALF].vecPosition, sizeof(double) * 3);
+	memcpy(pShereMem->position[LEFT_CALF], Tracker_pose[LEFT_CALF].vecPosition, sizeof(double) * 3);
+	memcpy(pShereMem->position[RIGHT_FOOT], Tracker_pose[RIGHT_FOOT].vecPosition, sizeof(double) * 3);
+	memcpy(pShereMem->position[LEFT_FOOT], Tracker_pose[LEFT_FOOT].vecPosition, sizeof(double) * 3);
 
 }
 

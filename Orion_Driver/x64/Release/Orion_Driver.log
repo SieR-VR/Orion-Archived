@@ -1,8 +1,16 @@
 ﻿D:\Program Files\Visualstudio\MSBuild\Microsoft\VC\v160\Microsoft.CppBuild.targets(445,5): warning MSB8004: Output Directory does not end with a trailing slash.  This build instance will add the slash as it is required to allow proper evaluation of the Output Directory.
+  Orion_Driver.cpp
+E:\Orion\Orion_Driver\Orion_Driver.cpp(108,66): warning C4244: '+=': 'double'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(109,66): warning C4244: '+=': 'double'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(110,47): warning C4244: '+=': 'double'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(409,56): warning C4244: '=': 'double'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(437,56): warning C4244: '=': 'double'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(465,56): warning C4244: '=': 'double'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
      ..\bin\drivers\orion\bin\win64\driver_orion.lib 라이브러리 및 ..\bin\drivers\orion\bin\win64\driver_orion.exp 개체를 생성하고 있습니다.
   코드를 생성하고 있습니다.
-  Previous IPDB not found, fall back to full compilation.
-E:\Orion\Orion_Driver\Orion_Driver.cpp(486): warning C4715: 'Tracker_Driver::GetPose': 모든 제어 경로에서 값을 반환하지는 않습니다.
-  All 400 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+E:\Orion\Orion_Driver\Orion_Driver.cpp(535): warning C4715: 'Tracker_Driver::GetPose': 모든 제어 경로에서 값을 반환하지는 않습니다.
+  2 of 400 functions ( 0.5%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    0 functions had inline decision re-evaluated but remain unchanged
   코드를 생성했습니다.
   Orion_Driver.vcxproj -> E:\Orion\Orion_Driver\..\bin\drivers\orion\bin\win64\driver_orion.dll
