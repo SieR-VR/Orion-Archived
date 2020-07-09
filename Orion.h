@@ -1,10 +1,19 @@
 #pragma once
 
-enum class trackerType {
-	CHEST = 0, WAIST, RIGHT_THIGH, LEFT_THIGH, RIGHT_CALF, LEFT_CALF, RIGHT_FOOT, LEFT_FOOT
-};
+namespace orion {
+	enum class trackerType {
+                CHEST = 0,
+                WAIST = 1,
+                LEFT_THIGH = 2,
+                RIGHT_THIGH = 3,
+                LEFT_CALF = 4,
+                RIGHT_CALF = 5,
+                LEFT_FOOT = 6,
+                RIGHT_FOOT = 7
+	};
 
-struct overlayShereMem {
-	float q1, q2, q3, q4;
-	bool isConnected;
-};
+	struct trackerData {
+		float w, x, y, z;
+		bool connected;
+	};
+}

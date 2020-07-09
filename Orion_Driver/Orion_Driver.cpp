@@ -65,9 +65,9 @@ HmdQuaternion_t getRotation(const HmdMatrix34_t& matrix) {
 	q.x = sqrtf(fmaxf(0, 1.0f + matrix.m[0][0] - matrix.m[1][1] - matrix.m[2][2])) / 2.0f;
 	q.y = sqrtf(fmaxf(0, 1.0f - matrix.m[0][0] + matrix.m[1][1] - matrix.m[2][2])) / 2.0f;
 	q.z = sqrtf(fmaxf(0, 1.0f - matrix.m[0][0] - matrix.m[1][1] + matrix.m[2][2])) / 2.0f;
-	q.x = copysignf(q.x, float(matrix.m[2][1] - matrix.m[1][2]));
-	q.y = copysignf(q.y, float(matrix.m[0][2] - matrix.m[2][0]));
-	q.z = copysignf(q.z, float(matrix.m[1][0] - matrix.m[0][1]));
+	q.x = copysignf(q.x, matrix.m[2][1] - matrix.m[1][2]);
+	q.y = copysignf(q.y, matrix.m[0][2] - matrix.m[2][0]);
+	q.z = copysignf(q.z, matrix.m[1][0] - matrix.m[0][1]);
 	return q;
 }
 
@@ -83,14 +83,14 @@ HmdVector3_t getPosition(const HmdMatrix34_t& matrix) {
 }
 
 // position 위치에서 qrot 방향으로 distance만큼 떨어진 곳의 좌표
-HmdVector3_t movePosition(const HmdQuaternion_t& qrot, const HmdVector3_t& position, const double& distance) {
+HmdVector3_t movePosition(const HmdQuaternion_t& qrot, const HmdVector3_t& position, const float& distance) {
 
 	HmdVector3_t rvec = { position.v[0], position.v[1], position.v[2] };
 	double sqw = qrot.w*qrot.w, sqx = qrot.x*qrot.x, sqy = qrot.y*qrot.y, sqz = qrot.z*qrot.z;
 
-	rvec.v[0] += -(2 * (qrot.x*qrot.z + qrot.w * qrot.y)) * distance;
-	rvec.v[1] += -(2 * (qrot.y*qrot.z - qrot.w * qrot.x)) * distance;
-	rvec.v[2] += (2 * (sqx + sqy) - 1) * distance;
+	rvec.v[0] += -(2.0f * float(qrot.x*qrot.z + qrot.w * qrot.y)) * distance;
+	rvec.v[1] += -(2.0f * float(qrot.y * qrot.z - qrot.w * qrot.x)) * distance;
+	rvec.v[2] += (2.0f * float(sqx + sqy) - 1) * distance;
 
 	return rvec;
 }
@@ -105,25 +105,6 @@ HmdQuaternion_t multipleQuat(const HmdQuaternion_t& q1,const HmdQuaternion_t& q2
 	};
 	return rq;
 }
-
-HANDLE hMapping = CreateFileMapping(
-	INVALID_HANDLE_VALUE,
-	NULL,
-	PAGE_READWRITE,
-	0,
-	sizeof(overlayShereMem),
-	L"SH_MEM"
-);
-
-LPBYTE buf = (BYTE*)MapViewOfFile(
-	hMapping,
-	FILE_MAP_ALL_ACCESS,
-	0,
-	0,
-	0
-);
-
-overlayShereMem* pShereMem = (overlayShereMem*)buf;
 
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -188,7 +169,7 @@ void CWatchdogDriver_Sample::Cleanup()
 class Tracker_Driver : public vr::ITrackedDeviceServerDriver
 {
 public:
-	Tracker_Driver(const std::string& Modelname, const trackerType& tType)
+	Tracker_Driver(const std::string& Modelname, const orion::trackerType& tType)
 		: m_tType(tType)
 	{
 		m_unObjectId = vr::k_unTrackedDeviceIndexInvalid;
@@ -220,6 +201,16 @@ public:
 		m_devicePose.shouldApplyHeadModel = true;
 		m_devicePose.qWorldFromDriverRotation = HmdQuaternion_Init(1, 0, 0, 0);
 		m_devicePose.qDriverFromHeadRotation = HmdQuaternion_Init(1, 0, 0, 0);
+
+		shareDataHandle = OpenFileMapping(FILE_MAP_ALL_ACCESS, NULL, L"ORION_SH_MEM");
+
+		if (shareDataHandle != NULL)
+			data = (orion::trackerData*)MapViewOfFile(shareDataHandle, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(orion::trackerData));
+		
+		if (shareDataHandle == NULL || data == NULL)
+			isShareMemAttached = false;
+		isShareMemAttached = true;
+
 		return VRInitError_None;
 	}
 
@@ -247,12 +238,10 @@ public:
 
 	// RunFrame에서 호출되어 DriverPose_t 반환
 	virtual DriverPose_t GetPose() {
-		if (pShereMem->isConnected) {
+		if (isShareMemAttached && data->connected) {
+			m_devicePose.qRotation = HmdQuaternion_Init(data->w, data->x, data->y, data->z);
 			m_devicePose.deviceIsConnected = true;
-			m_devicePose.qRotation = HmdQuaternion_Init(pShereMem->q1, pShereMem->q2, pShereMem->q4, pShereMem->q3);
-			m_devicePose.vecPosition[0] = 0;
 			m_devicePose.vecPosition[1] = 1;
-			m_devicePose.vecPosition[0] = 0;
 		}
 		else {
 			m_devicePose.deviceIsConnected = false;
@@ -277,8 +266,12 @@ private:
 	std::string m_sSerialNumber;
 	std::string m_sModelNumber;
 
-	trackerType m_tType;
+	orion::trackerType m_tType;
 	DriverPose_t m_devicePose = { 0 };
+
+	HANDLE shareDataHandle;
+	orion::trackerData* data;
+	bool isShareMemAttached;
 };
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -305,7 +298,7 @@ EVRInitError CServerDriver_Sample::Init( vr::IVRDriverContext *pDriverContext )
 	VR_INIT_SERVER_DRIVER_CONTEXT( pDriverContext );
 	InitDriverLog( vr::VRDriverLog() );
 
-	m_pchest_tracker = new Tracker_Driver("Chest_Tracker", trackerType::CHEST);
+	m_pchest_tracker = new Tracker_Driver("Chest_Tracker", orion::trackerType::CHEST);
 	vr::VRServerDriverHost()->TrackedDeviceAdded(
 		m_pchest_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pchest_tracker
 	);

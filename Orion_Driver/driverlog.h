@@ -20,6 +20,4 @@ extern void DebugDriverLog( const char *pchFormat, ... );
 extern bool InitDriverLog( vr::IVRDriverLog *pDriverLog );
 extern void CleanupDriverLog();
 
-
-
 #endif // DRIVERLOG_H
