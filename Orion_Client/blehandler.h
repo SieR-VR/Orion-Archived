@@ -26,6 +26,7 @@ public:
     //service (characteristics)
     QStringList getCharacteristicListString(const int &serviceIndex);
     QByteArray getData(const int &serviceIndex, const int &characteristicIndex);
+    bool subscribeData(const int &serviceIndex, const int &characteristicIndex);
 
 signals:
     //devices
@@ -36,6 +37,7 @@ signals:
 
     //characteristics
     void characteristicListUpdated();
+    void valueChanged(const QByteArray &data, const QString &uuid);
 
     //log
     void textRecived(const QString &text);
@@ -56,6 +58,7 @@ private slots:
     //service (characteristics)
     void serviceStateChanged(QLowEnergyService::ServiceState newState);
     void serviceError(QLowEnergyService::ServiceError error);
+    void updateValue(QLowEnergyCharacteristic characteristic, QByteArray data);
 
 private:
     QBluetoothDeviceDiscoveryAgent *m_agent;

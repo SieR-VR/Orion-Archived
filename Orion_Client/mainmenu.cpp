@@ -11,30 +11,31 @@ mainMenu::mainMenu(QWidget *parent)
     ui->btnDisconnect->setEnabled(false);
     ui->btnRead->setEnabled(false);
     ui->btnNotify->setEnabled(false);
+
     ui->cbDevices->setEnabled(false);
     ui->cbServices->setEnabled(false);
     ui->cbCharacteristics->setEnabled(false);
 
     handler = new BLEHandler();
-    timer = new QTimer();
-    connect(timer, &QTimer::timeout, this, &mainMenu::dataUpdate);
-
     connect(handler, &BLEHandler::textRecived, this, &mainMenu::writeText);
     connect(handler, &BLEHandler::deviceListUpdated, this, &mainMenu::updateDeviceList);
     connect(handler, &BLEHandler::serviceListUpdated, this, &mainMenu::updateServiceList);
     connect(handler, &BLEHandler::characteristicListUpdated, this, &mainMenu::updateCharacteristicList);
+    connect(handler, &BLEHandler::valueChanged, this, &mainMenu::dataNotifyUpdate);
 
-    isSharedMemCreated = driverMemoryCreate();
+    if(!shereMemHandler.createShereMem())
+        shereMemHandler.connectToShereMem();
 }
 
 mainMenu::~mainMenu() {
+    delete handler;
     delete ui;
 }
 
 void mainMenu::writeText(const QString &text) {
-    QString compare;
-    if(text == compare)
+    if(!text.size())
         return;
+
     ui->textLog->insertPlainText(text+"\n");
 }
 
@@ -82,33 +83,19 @@ void mainMenu::updateCharacteristicList() {
 
 void mainMenu::dataUpdate() {
     auto data = handler->getData(ui->cbServices->currentIndex(), ui->cbCharacteristics->currentIndex());
-    if(ui->cbServices->currentIndex() == 2 && ui->cbCharacteristics->currentIndex() == 0) {
-        short q1 = data.at(0) << 8 | data.at(1); short q2 = data.at(2) << 8 | data.at(3); short q3 = data.at(4) << 8 | data.at(5); short q4 = data.at(6) << 8 | data.at(7);
-        orion::trackerData data = {q1 / 16384.0f, q2 / 16384.0f, q3 / 16384.0f, q4 / 16384.0f, true};
-        driverDataUpdate(data);
-        writeText(QString::number(q1 / 16384.0) + " " + QString::number(q2 / 16384.0) + " " + QString::number(q3 / 16384.0) + " " + QString::number(q4 / 16384.0));
-    }
-    else {
-        writeText(data);
-    }
+    writeText(data);
 }
 
-bool mainMenu::driverMemoryCreate() {
-    driverDataHandle = CreateFileMapping(INVALID_HANDLE_VALUE, NULL,PAGE_READWRITE, 0, sizeof(orion::trackerData), L"ORION_SH_MEM");
-    if(driverDataHandle == NULL)
-        return false;
+void mainMenu::dataNotifyUpdate(const QByteArray &data, const QString &uuid) {
+    float qw, qx, qy, qz;
+    memcpy_s(&qw, sizeof(float), &data.data()[0], sizeof(float));
+    memcpy_s(&qx, sizeof(float), &data.data()[4], sizeof(float));
+    memcpy_s(&qy, sizeof(float), &data.data()[8], sizeof(float));
+    memcpy_s(&qz, sizeof(float), &data.data()[12], sizeof(float));
+    ui->lQuat->setText(QString::number(qw) + " " + QString::number(qx) + " " + QString::number(qy) + " " + QString::number(qz));
 
-    driverData = (char*)MapViewOfFile(driverDataHandle, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(orion::trackerData));
-    if(driverData == NULL)
-        return false;
-
-    return true;
-}
-
-void mainMenu::driverDataUpdate(const orion::trackerData &data) {
-    if(isSharedMemCreated) {
-        memcpy_s(driverData, sizeof(orion::trackerData), &data, sizeof(orion::trackerData));
-    }
+    OrionSensorData sensorData = {qw, qx, qy, qz, true};
+    shereMemHandler.dataUpdate(sensorData);
 }
 
 void mainMenu::on_btnScan_clicked() {
@@ -137,17 +124,14 @@ void mainMenu::on_btnDisconnect_clicked(){
     handler->disconnectFromDevice();
 }
 
-void mainMenu::on_cbServices_currentIndexChanged(int index)
-{
+void mainMenu::on_cbServices_currentIndexChanged(int index) {
     updateCharacteristicList();
 }
 
-void mainMenu::on_btnNotify_clicked()
-{
-    timer->start(16);
+void mainMenu::on_btnNotify_clicked() {
+    handler->subscribeData(ui->cbServices->currentIndex(), ui->cbCharacteristics->currentIndex());
 }
 
-void mainMenu::on_btnRead_clicked()
-{
+void mainMenu::on_btnRead_clicked() {
     dataUpdate();
 }

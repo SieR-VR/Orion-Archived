@@ -5,6 +5,7 @@
 
 #include "I2Cdev.h"
 #include "MPU9250_REG.h"
+#include "MadgwickAHRS.h"
 
 #define MPU9250_ADDRESS 0x68
 
@@ -13,15 +14,15 @@ uint8_t gyroData[6] = { 0 };
 uint8_t magData[6] = { 0 };
 
 uint8_t destination[3];
+float desf[3];
 
 uint32_t time;
+bool firstLoop = true;
 
 BLEPeripheral trackerPeripheral = BLEPeripheral();
 
 BLEService service = BLEService("0000183B-0000-1000-8000-00805F9B34FB");
-BLEFixedLengthCharacteristic accelCharacteristic = BLEFixedLengthCharacteristic("faf3ee90-c260-11ea-b3de-0242ac130004", BLENotify | BLERead, 6);
-BLEFixedLengthCharacteristic gyroCharacteristic = BLEFixedLengthCharacteristic("faf3ee91-c260-11ea-b3de-0242ac130004", BLENotify | BLERead, 6);
-BLEFixedLengthCharacteristic magCharacteristic = BLEFixedLengthCharacteristic("faf3ee92-c260-11ea-b3de-0242ac130004", BLENotify | BLERead, 6);
+BLEFixedLengthCharacteristic quatCharacteristic = BLEFixedLengthCharacteristic("faf3ee90-c260-11ea-b3de-0242ac130004", BLENotify | BLERead, 16);
 
 I2Cdev i2cInterface = I2Cdev();
 
@@ -40,39 +41,57 @@ void setup()
   initAK8963();
   initMPU9250();
 
-  BLEDescriptor magDescriptor = BLEDescriptor("faf3ee93-c260-11ea-b3de-0242ac130004", destination, 3);
+  for(int i = 0; i < 3; i++)
+    desf[i] = ((((destination[0] - 128) * 0.5f ) / 128) + 1);
 
   trackerPeripheral.setLocalName("Orion_Tracker");
   trackerPeripheral.setDeviceName("Orion_Tracker");
 
-  trackerPeripheral.setConnectionInterval(0x0006, 0x0060);
+  trackerPeripheral.setConnectionInterval(0x0006, 0x0006);
   trackerPeripheral.setTxPower(4);
 
   trackerPeripheral.setAdvertisedServiceUuid(service.uuid());
   trackerPeripheral.addAttribute(service);
-  trackerPeripheral.addAttribute(accelCharacteristic);
-  trackerPeripheral.addAttribute(gyroCharacteristic);
-  trackerPeripheral.addAttribute(magCharacteristic);
-  trackerPeripheral.addAttribute(magDescriptor);
+  trackerPeripheral.addAttribute(quatCharacteristic);
   
   trackerPeripheral.begin();
-
-  Serial.begin(9600);
 }
 
 void loop() {
-  readAccelData();
-  readGyroData();
-  readMagData();
+  if(trackerPeripheral.connected()) {
+    if(firstLoop) {
+      time = millis();
+      firstLoop = false;
+    }
+    readAccelData();
+    readGyroData();
+    readMagData();
 
-  accelCharacteristic.setValue((char *)accelData);
-  gyroCharacteristic.setValue((char *)gyroData);
-  magCharacteristic.setValue((char *)magData);
+    float ax = (short)(accelData[0] << 8 | accelData[1]) * 8.0f / 32768.0f;
+    float ay = (short)(accelData[2] << 8 | accelData[3]) * 8.0f / 32768.0f;
+    float az = (short)(accelData[4] << 8 | accelData[5]) * 8.0f / 32768.0f;
 
+    float gx = (short)(gyroData[0] << 8 | gyroData[1]) * 1000.0f / 32768.0f * 0.0349066f;
+    float gy = (short)(gyroData[2] << 8 | gyroData[3]) * 1000.0f / 32768.0f * 0.0349066f;
+    float gz = (short)(gyroData[4] << 8 | gyroData[5]) * 1000.0f / 32768.0f * 0.0349066f;
+
+    float mx = (short)(magData[0] << 8 | magData[1]) * desf[0] * 300.0f / 4096.0f;
+    float my = (short)(magData[2] << 8 | magData[3]) * desf[1] * 300.0f / 4096.0f;
+    float mz = (short)(magData[4] << 8 | magData[5]) * desf[2] * 300.0f / 4096.0f;
+
+    MadgwickAHRSupdate(gx, gy, gz, ax, ay, az, mx, my, mz, (millis() - time) / 1000.0f);
+    time = millis();
+
+
+    char value[16];
+    memcpy(&value[0], &q0, sizeof(float));
+    memcpy(&value[4], &q1, sizeof(float));
+    memcpy(&value[8], &q2, sizeof(float));
+    memcpy(&value[12], &q3, sizeof(float));
+
+    quatCharacteristic.setValue(value);
+  }
   trackerPeripheral.poll();
-  Serial.print((int16_t)(magData[0] << 8 | magData[1])); Serial.print(" ");
-  Serial.print((int16_t)(magData[2] << 8 | magData[3])); Serial.print(" ");
-  Serial.println((int16_t)(magData[4] << 8 | magData[5]));
 }
 
 void initMPU9250() {
@@ -137,5 +156,9 @@ void readMagData() {
     magData[4] = tempMagData[5];
     magData[5] = tempMagData[4];
   }
-  i2cInterface.writeByte(AK8963_ADDRESS, AK8963_CNTL, 0x11); // Set magnetometer data resolution and sample ODR
+  uint8_t cntl;
+  i2cInterface.readByte(AK8963_ADDRESS, AK8963_CNTL, &cntl);
+  if(cntl == 0x10) {
+    i2cInterface.writeByte(AK8963_ADDRESS, AK8963_CNTL, 0x11); // Set magnetometer data resolution and sample ODR
+  }
 }

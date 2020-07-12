@@ -4,7 +4,6 @@
 #include <QMainWindow>
 #include <QTimer>
 #include <Orion.h>
-#include <Windows.h>
 #include "blehandler.h"
 
 QT_BEGIN_NAMESPACE
@@ -24,6 +23,7 @@ private slots:
     void updateServiceList();
     void updateCharacteristicList();
     void dataUpdate();
+    void dataNotifyUpdate(const QByteArray &data, const QString &uuid);
 
     void writeText(const QString &text);
 
@@ -34,16 +34,10 @@ private slots:
     void on_btnRead_clicked();
     void on_cbServices_currentIndexChanged(int index);
 
-    bool driverMemoryCreate();
-    void driverDataUpdate(const orion::trackerData &data);
-
 private:
     Ui::mainMenu *ui;
     BLEHandler *handler;
-    QTimer *timer;
 
-    HANDLE driverDataHandle;
-    char *driverData;
-    bool isSharedMemCreated;
+    Orion shereMemHandler;
 };
 #endif // MAINMENU_H

@@ -169,7 +169,7 @@ void CWatchdogDriver_Sample::Cleanup()
 class Tracker_Driver : public vr::ITrackedDeviceServerDriver
 {
 public:
-	Tracker_Driver(const std::string& Modelname, const orion::trackerType& tType)
+	Tracker_Driver(const std::string& Modelname, const Orion::trackerType& tType)
 		: m_tType(tType)
 	{
 		m_unObjectId = vr::k_unTrackedDeviceIndexInvalid;
@@ -202,15 +202,7 @@ public:
 		m_devicePose.qWorldFromDriverRotation = HmdQuaternion_Init(1, 0, 0, 0);
 		m_devicePose.qDriverFromHeadRotation = HmdQuaternion_Init(1, 0, 0, 0);
 
-		shareDataHandle = OpenFileMapping(FILE_MAP_ALL_ACCESS, NULL, L"ORION_SH_MEM");
-
-		if (shareDataHandle != NULL)
-			data = (orion::trackerData*)MapViewOfFile(shareDataHandle, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(orion::trackerData));
-		
-		if (shareDataHandle == NULL || data == NULL)
-			isShareMemAttached = false;
-		isShareMemAttached = true;
-
+		shereMemhandler.createShereMem();
 		return VRInitError_None;
 	}
 
@@ -238,8 +230,9 @@ public:
 
 	// RunFrame에서 호출되어 DriverPose_t 반환
 	virtual DriverPose_t GetPose() {
-		if (isShareMemAttached && data->connected) {
-			m_devicePose.qRotation = HmdQuaternion_Init(data->w, data->x, data->y, data->z);
+		OrionSensorData data = shereMemhandler.getData();
+		if (data.isConnected) {
+			m_devicePose.qRotation = HmdQuaternion_Init(data.qw, data.qy, data.qz, data.qx); //w, y, z, x
 			m_devicePose.deviceIsConnected = true;
 			m_devicePose.vecPosition[1] = 1;
 		}
@@ -266,12 +259,10 @@ private:
 	std::string m_sSerialNumber;
 	std::string m_sModelNumber;
 
-	orion::trackerType m_tType;
+	Orion::trackerType m_tType;
 	DriverPose_t m_devicePose = { 0 };
 
-	HANDLE shareDataHandle;
-	orion::trackerData* data;
-	bool isShareMemAttached;
+	Orion shereMemhandler;
 };
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -298,7 +289,7 @@ EVRInitError CServerDriver_Sample::Init( vr::IVRDriverContext *pDriverContext )
 	VR_INIT_SERVER_DRIVER_CONTEXT( pDriverContext );
 	InitDriverLog( vr::VRDriverLog() );
 
-	m_pchest_tracker = new Tracker_Driver("Chest_Tracker", orion::trackerType::CHEST);
+	m_pchest_tracker = new Tracker_Driver("Chest_Tracker", Orion::trackerType::CHEST);
 	vr::VRServerDriverHost()->TrackedDeviceAdded(
 		m_pchest_tracker->GetSerialNumber().c_str(), vr::TrackedDeviceClass_GenericTracker, m_pchest_tracker
 	);

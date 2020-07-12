@@ -105,6 +105,7 @@ void BLEHandler::serviceScanDone() {
         m_services.append(service);
         connect(service, &QLowEnergyService::stateChanged, this, &BLEHandler::serviceStateChanged);
         connect(service, QOverload<QLowEnergyService::ServiceError>::of(&QLowEnergyService::error), this, &BLEHandler::serviceError);
+        connect(service, &QLowEnergyService::characteristicChanged, this, &BLEHandler::updateValue);
         emit textRecived("Discovering details for this device - " + service->serviceName() + " : " + serviceUuid.toString());
         service->discoverDetails();
     }
@@ -138,6 +139,10 @@ void BLEHandler::serviceStateChanged(QLowEnergyService::ServiceState newState) {
     emit characteristicListUpdated();
 }
 
+void BLEHandler::updateValue(QLowEnergyCharacteristic characteristic, QByteArray data) {
+    emit valueChanged(data, characteristic.uuid().toString());
+}
+
 void BLEHandler::agentError(QBluetoothDeviceDiscoveryAgent::Error error) {
     emit textRecived("Agent Error : " + QVariant::fromValue(error).toString());
 }
@@ -148,6 +153,24 @@ void BLEHandler::controllerError(QLowEnergyController::Error error) {
 
 void BLEHandler::serviceError(QLowEnergyService::ServiceError error) {
     emit textRecived("Service Error : " + QVariant::fromValue(error).toString());
+}
+
+bool BLEHandler::subscribeData(const int &serviceIndex, const int &characteristicIndex) {
+    auto service = m_services.at(serviceIndex);
+    if(!service)
+        return false;
+
+    auto characteristic = service->characteristics().at(characteristicIndex);
+    if(!characteristic.isValid())
+        return false;
+
+    auto descriptor = characteristic.descriptor(QBluetoothUuid(QBluetoothUuid::ClientCharacteristicConfiguration));
+    if(!descriptor.isValid())
+        return false;
+
+    service->writeDescriptor(descriptor, QByteArray::fromHex("0100"));
+    emit textRecived("Notify enabled");
+    return true;
 }
 
 QByteArray BLEHandler::getData(const int &serviceIndex, const int &characteristicIndex) {
