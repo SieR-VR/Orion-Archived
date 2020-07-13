@@ -19,3 +19,27 @@ $ git clone --recurse-submodules https://github.com/SieR-VR/Orion.git 을 이용
 [**VSCode**](https://code.visualstudio.com/) 에서 Visual Studio Code를 받아줍니다. 그 다음 [**PlatformIO**](https://platformio.org/platformio-ide) 를 참고하여 VSCode에 PlatformIO 확장을 받아줍니다. 그 다음 BLEPeripheral 라이브러리를 받아주면 세팅 끝입니다.
 ### 2-3. Driver
 [**Visual Studio**](https://visualstudio.microsoft.com/ko/) 에서 Visual Studio를 받아줍니다. (Code로도 가능할까 싶지만 당장은 Visual Studio로 하게 만들었습니다.)
+## 3. 원리
+OpenVR Driver API를 통해 HMD의 위치를 얻어낼 수 있다는 것에 착안하여, 방향만을 측정하는 센서로 온 몸을 추적할 수 있게 만들었습니다.
+
+    HmdVector3_t movePosition(const HmdQuaternion_t& qrot, const HmdVector3_t& position, const float& distance) {
+
+	HmdVector3_t rvec = { position.v[0], position.v[1], position.v[2] };
+	double sqw = qrot.w*qrot.w, sqx = qrot.x*qrot.x, sqy = qrot.y*qrot.y, sqz = qrot.z*qrot.z;
+
+	rvec.v[0] += -(2.0f * float(qrot.x*qrot.z + qrot.w * qrot.y)) * distance;
+	rvec.v[1] += -(2.0f * float(qrot.y * qrot.z - qrot.w * qrot.x)) * distance;
+	rvec.v[2] += (2.0f * float(sqx + sqy) - 1) * distance;
+
+	return rvec;
+    }
+     
+이 함수는 position 위치로부터 qrot 각도로 distance 거리만큼 떨어진 곳의 좌표를 구하는 함수입니다.
+
+movePosition([HMD의 위치], [HMD 방향 - 90º], [머리에서부터 목까지의 거리]) = [목의 좌표]이고,
+
+movePosition([목의 좌표], [명치 트래커 방향 - 90º], [목에서부터 명치까지의 거리]) = [명치의 좌표]이므로,
+
+명치 트래커의 방향과 HMD의 좌표, 방향만으로 트래커의 위치를 알아낼 수 있습니다.
+
+또한 이와 같은 방법을 계속 적용해나간다면 발까지의 모든 좌표를 알 수 있게 됩니다.
